@@ -114,6 +114,28 @@ create_table() {
     fi
 }
 
+#list tables 
+list_tables() {
+    # Check if the user is inside a valid database
+    if [ ! -d "$database_name" ]; then
+        echo "You are not connected to a database."
+        return
+    fi
+
+    # List all files in the database directory, excluding .rows files (which store raw data)
+    echo "Listing tables in the '$database_name' database..."
+    tables=$(ls "$database_name" --ignore='*.rows' 2>/dev/null)
+
+    if [ -z "$tables" ]; then
+        echo "No tables found in this database."
+    else
+        echo "Tables in '$database_name':"
+        echo "$tables"  # Display the list of table names
+    fi
+    return_to_menu
+}
+
+
 ## Table operations menu
 table_menu() {
     count=0
