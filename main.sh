@@ -38,7 +38,7 @@ list_databases() {
     return_to_menu
 }
 
-## Connecting to a database
+
 connect_database() {
     read -p "Enter the name of the database you want to connect to: " database_name
     if [ -d "./db/$database_name" ]; then
@@ -49,6 +49,69 @@ connect_database() {
         echo "Database '$database_name' does not exist."
     fi
     return_to_menu
+}
+
+create_table() {
+    read -p "Enter table name: " table_name
+    if [[ $table_name =~ ^[a-zA-Z0-9_]+$ ]]; then
+        if [[ ${#table_name} -gt 50 ]]; then
+            echo "Table name is too long. Maximum length is 50 characters."
+            return
+        fi
+
+        if [ -f "$table_name" ]; then
+            echo "Table '$table_name' already exists."
+        else
+            while true; do
+                read -p "Enter number of fields: " num_fields
+                if [[ $num_fields =~ ^[0-9]+$ && $num_fields -ge 1 && $num_fields -le 20 ]]; then
+                    break
+                else
+                    echo "Invalid input. Please enter a positive integer between 1 and 20."
+                fi
+            done
+
+            read -p "Are you sure you want to create the table '$table_name'? (y/n): " confirm
+            if [[ $confirm != "y" && $confirm != "Y" ]]; then
+                echo "Table creation canceled."
+                return
+            fi
+
+            metadata=""
+            for ((i=1; i<=num_fields; i++)); do
+                while true; do
+                    read -p "Enter field $i name: " field_name
+                    if [[ $i -eq 1 && $field_name != "id" ]]; then
+                        echo "The first field must be 'id' (primary key)."
+                    elif [[ ! $field_name =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
+                        echo "Invalid field name. Field names must start with a letter and contain only letters, numbers, and underscores."
+                    elif [[ $metadata == *"$field_name:"* ]]; then
+                        echo "Field name '$field_name' already exists. Please choose a unique name."
+                    else
+                        break
+                    fi
+                done
+
+                while true; do
+                    read -p "Enter field $i type (string/int): " field_type
+                    field_type=$(echo "$field_type" | tr '[:upper:]' '[:lower:]')
+                    if [[ $field_type != "string" && $field_type != "int" ]]; then
+                        echo "Invalid field type. Field type must be 'string' or 'int'."
+                    else
+                        break
+                    fi
+                done
+
+                metadata+="$field_name:$field_type,"
+            done
+            # Remove the trailing comma
+            metadata=${metadata%,}
+            echo "$metadata" > "$table_name"
+            echo "Table '$table_name' created."
+        fi
+    else
+        echo "Invalid table name. Use only letters, numbers, and underscores."
+    fi
 }
 
 ## Table operations menu
