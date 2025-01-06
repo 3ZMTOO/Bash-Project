@@ -1,5 +1,7 @@
 #!/bin/bash
 
+database_name=""
+
 return_to_menu() {
     read -p "Do you want to return to the home page? (yes/no): " choose
     if [[ $choose == "yes" ]]; then
@@ -27,6 +29,76 @@ create_database() {
     return_to_menu
 }
 
+insert_into_table() {
+    if [ -z "$current_database_path" ]; then
+        echo "You are not connected to a database."
+        return
+    fi
+
+    read -p "Enter the name of the table: " table_name
+    table_file="$current_database_path/$table_name.csv"
+    metadata_file="$current_database_path/$table_name.metadata"
+
+    if [ ! -f "$table_file" ]; then
+        echo "Table '$table_name' does not exist."
+        return
+    fi
+
+    if [ ! -f "$metadata_file" ]; then
+        echo "Metadata file for '$table_name' does not exist."
+        return
+    fi
+
+    # Read metadata into an array
+    IFS=',' read -r -a fields < "$metadata_file"
+
+    while true; do
+        echo "Enter values for each field:"
+        for field in "${fields[@]}"; do
+            field_name=$(echo "$field" | cut -d':' -f1)
+            field_type=$(echo "$field" | cut -d':' -f2)
+
+            while true; do
+                read -p "Enter value for $field_name ($field_type): " value
+
+                # Validate value based on type
+                case "$field_type" in
+                    "int")
+                        if [[ ! $value =~ ^[0-9]+$ ]]; then
+                            echo "Invalid value for $field_name. Expected an integer."
+                            continue
+                        fi
+                        ;;
+                    "string")
+                        # No specific validation for strings
+                        if [[ -z "$value" ]]; then
+                            echo "Invalid value for $field_name. Cannot be empty."
+                            continue
+                        fi
+                        ;;
+                    *)
+                        echo "Unknown field type '$field_type' in metadata."
+                        return
+                        ;;
+                esac
+                # Append validated value to row
+                row+="$value,"
+                break
+            done
+        done
+
+        # Remove trailing comma from the row
+        row=${row%,}
+
+        # Append the row to the CSV file
+        echo "$row" >> "$table_file"
+
+        echo "Row inserted successfully!"
+        break
+    done
+}
+
+
 ## Listing databases
 list_databases() {
     if [ ! -d "./db/" ]; then
@@ -38,11 +110,12 @@ list_databases() {
     return_to_menu
 }
 
-
+##Connecting database
 connect_database() {
     read -p "Enter the name of the database you want to connect to: " database_name
     if [ -d "./db/$database_name" ]; then
-        cd "./db/$database_name"
+        # Store the full path of the connected database
+        current_database_path="./db/$database_name"
         echo "You are now connected to '$database_name' database."
         table_menu
     else
@@ -51,6 +124,7 @@ connect_database() {
     return_to_menu
 }
 
+##Create table
 create_table() {
     read -p "Enter table name: " table_name
     if [[ $table_name =~ ^[a-zA-Z0-9_]+$ ]]; then
@@ -59,7 +133,7 @@ create_table() {
             return
         fi
 
-        if [ -f "$table_name" ]; then
+        if [ -f "$current_database_path/$table_name.csv" ]; then
             echo "Table '$table_name' already exists."
         else
             while true; do
@@ -104,19 +178,83 @@ create_table() {
 
                 metadata+="$field_name:$field_type,"
             done
-            # Remove the trailing comma
+
+            # Save metadata in a separate file
             metadata=${metadata%,}
-            echo "$metadata" > "$table_name"
-            echo "Table '$table_name' created."
+            echo "$metadata" > "$current_database_path/$table_name.metadata"
+            touch "$current_database_path/$table_name.csv"
+            echo "Table '$table_name' created with metadata."
         fi
     else
         echo "Invalid table name. Use only letters, numbers, and underscores."
     fi
 }
 
+
+ 
+## List table
+list_tables() {
+    if [ -z "$current_database_path" ]; then
+        echo "You are not connected to a database."
+        return
+    fi
+
+    echo "Listing tables in the '$current_database_path' database..."
+    tables=$(ls "$current_database_path" | grep -v '.metadata' 2>/dev/null)
+
+    if [ -z "$tables" ]; then
+        echo "No tables found in this database."
+    else
+        echo "Tables in the '$current_database_path' database:"
+        echo "$tables"
+    fi
+    return_to_menu
+}
+
+## Drop Table 
+drop_table() {
+    if [ -z "$current_database_path" ]; then
+        echo "You are not connected to a database."
+        return
+    fi
+
+    tables=$(ls "$current_database_path" | grep -v '.rows' | sed 's/.csv$//') 
+    echo "Tables in the '$current_database_path' database:"
+    echo "$tables"
+
+    read -p "Enter the name of the table you want to drop: " table_name
+
+    table_file="$current_database_path/$table_name.csv"
+    metadata_file="$current_database_path/$table_name.metadata"
+    
+    echo "Checking table file: $table_file"
+    echo "Checking metadata file: $metadata_file"
+
+    if [ ! -f "$table_file" ]; then
+        echo "Table '$table_name' does not exist in this database."
+        return
+    fi
+
+    if [ ! -f "$metadata_file" ]; then
+        echo "Metadata file for '$table_name' does not exist."
+        return
+    fi
+
+    read -p "Are you sure you want to drop the table '$table_name'? (y/n): " confirm
+    if [[ $confirm != "y" && $confirm != "Y" ]]; then
+        echo "Table deletion canceled."
+        return
+    fi
+
+    rm "$table_file"
+    rm "$metadata_file"
+    echo "Table '$table_name' and its metadata have been dropped successfully."
+}
+
+
 ## Table operations menu
 table_menu() {
-    count=0
+	count=0
     while ((count<5)); do
         echo "Table Menu:"
         echo "1. Create Table"
