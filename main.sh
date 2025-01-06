@@ -181,7 +181,7 @@ drop_table() {
     echo "Table '$table_name' and its metadata have been dropped successfully."
 }
 
-# Delete from table 
+## Delete from table 
 delete_from_table() {
     echo "Enter your table name:"
     read -r tname
@@ -290,17 +290,17 @@ delete_specific_cell() {
 # Delete the entire table
 delete_entire_table() {
     local confirm
-    echo "Are you sure you want to delete the entire table '$tname'? (y/n)"
+    echo "Are you sure you want to remove all data in the table '$tname' but keep the structure? (y/n)"
     read -r confirm
     if [[ $confirm =~ ^[Yy]$ ]]; then
-        rm -f "$current_database_path/$tname.csv" "$current_database_path/$tname.metadata"
-        echo "Table '$tname' and its metadata deleted."
+        > "$current_database_path/$tname.csv"
+        echo "All data cleared from the table '$tname', but the table structure is kept."
     else
-        echo "Deletion canceled."
+        echo "Clear operation canceled."
     fi
 }
 
-# Update Row
+## Update Row
 update_row() {
     if [ -z "$current_database_path" ]; then
         echo "You are not connected to a database."
