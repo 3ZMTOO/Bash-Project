@@ -291,6 +291,47 @@ delete_entire_table() {
     fi
 }
 
+# Update Row
+update_row() {
+    if [ -z "$current_database_path" ]; then
+        echo "You are not connected to a database."
+        return
+    fi
+
+    read -p "Enter the table name to update a row: " table_name
+    table_file="$current_database_path/$table_name.csv"
+    metadata_file="$current_database_path/$table_name.metadata"
+
+    if [ ! -f "$table_file" ]; then
+        echo "Table '$table_name' does not exist."
+        return
+    fi
+
+    if [ ! -f "$metadata_file" ]; then
+        echo "Metadata file for '$table_name' does not exist."
+        return
+    fi
+
+    # Get the primary key value to search for
+    read -p "Enter the primary key value of the row to update: " primary_key
+
+    # Check if the row exists
+    row=$(grep "^$primary_key," "$table_file")
+    if [ -z "$row" ]; then
+        echo "Row with primary key '$primary_key' not found."
+        return
+    fi
+
+    echo "Found the row: $row"
+
+    # Ask for the new row data (entire row)
+    read -p "Enter the new data for the row (comma-separated): " new_row
+
+    # Replace the old row with the new one using sed
+    sed -i "s/^$primary_key,.*/$new_row/" "$table_file"
+    echo "Row with primary key '$primary_key' has been updated."
+}
+
 ## insert_into tables
 insert_into_table() {
     if [ -z "$current_database_path" ]; then
