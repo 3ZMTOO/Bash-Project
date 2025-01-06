@@ -224,12 +224,20 @@ delete_column() {
         return
     fi
 
-    # Remove the column from the CSV file
+    # Use awk to delete the specified column and preserve the structure
     awk -F, -v col="$column_number" '{
         for (i = 1; i <= NF; i++) {
-            if (i != col) printf "%s%s", $i, (i == NF ? ORS : FS)
+            if (i != col) {
+                # Print the fields correctly separated by commas, but omit the deleted column
+                printf "%s", $i
+                if (i != NF && i != col) {
+                    printf ","
+                }
+            }
         }
+        print ""  # Ensure newline after each row
     }' "$current_database_path/$tname.csv" > "$current_database_path/temp.csv" && mv "$current_database_path/temp.csv" "$current_database_path/$tname.csv"
+
     echo "Column $column_number deleted."
 }
 
@@ -328,7 +336,7 @@ update_row() {
     read -p "Enter the new data for the row (comma-separated): " new_row
 
     # Replace the old row with the new one using sed
-    sed -i "s/^$primary_key,.*/$new_row/" "$table_file"
+    sed -i "/^$primary_key,/c\\$new_row" "$table_file"
     echo "Row with primary key '$primary_key' has been updated."
 }
 
