@@ -122,8 +122,6 @@ create_table() {
     fi
 }
 
-
-
 ## List table
 list_tables() {
     if [ -z "$current_database_path" ]; then
@@ -150,7 +148,7 @@ drop_table() {
         return
     fi
 
-    tables=$(ls "$current_database_path" | grep -v '.rows' | sed 's/.csv$//')
+    tables=$(ls "$current_database_path" | sed 's/.csv$//')
     echo "Tables in the '$current_database_path' database:"
     echo "$tables"
 
@@ -224,19 +222,19 @@ delete_column() {
         return
     fi
 
-    # Use awk to delete the specified column and preserve the structure
-    awk -F, -v col="$column_number" '{
+    new_content=$(awk -F, -v col="$column_number" '{
         for (i = 1; i <= NF; i++) {
             if (i != col) {
-                # Print the fields correctly separated by commas, but omit the deleted column
                 printf "%s", $i
                 if (i != NF && i != col) {
                     printf ","
                 }
             }
         }
-        print ""  # Ensure newline after each row
-    }' "$current_database_path/$tname.csv" > "$current_database_path/temp.csv" && mv "$current_database_path/temp.csv" "$current_database_path/$tname.csv"
+        print ""  
+    }' "$current_database_path/$tname.csv")
+
+    echo "$new_content" > "$current_database_path/$tname.csv"
 
     echo "Column $column_number deleted."
 }
@@ -282,7 +280,10 @@ delete_specific_cell() {
         return
     fi
 
-    awk -F, -v row="$row_number" -v col="$column_number" 'NR == row { $col = ""; } { print }' OFS=, "$current_database_path/$tname.csv" > "$current_database_path/temp.csv" && mv "$current_database_path/temp.csv" "$current_database_path/$tname.csv"
+    new_content=$(awk -F, -v row="$row_number" -v col="$column_number" 'NR == row { $col = ""; } { print }' OFS=, "$current_database_path/$tname.csv")
+
+    echo "$new_content" > "$current_database_path/$tname.csv"
+
     echo "Cell in row $row_number, column $column_number deleted."
 }
 
@@ -320,10 +321,9 @@ update_row() {
         return
     fi
 
-    # Get the primary key value to search for
+  
     read -p "Enter the primary key value of the row to update: " primary_key
 
-    # Check if the row exists
     row=$(grep "^$primary_key," "$table_file")
     if [ -z "$row" ]; then
         echo "Row with primary key '$primary_key' not found."
@@ -332,10 +332,8 @@ update_row() {
 
     echo "Found the row: $row"
 
-    # Ask for the new row data (entire row)
     read -p "Enter the new data for the row (comma-separated): " new_row
 
-    # Replace the old row with the new one using sed
     sed -i "/^$primary_key,/c\\$new_row" "$table_file"
     echo "Row with primary key '$primary_key' has been updated."
 }
