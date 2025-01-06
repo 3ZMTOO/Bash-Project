@@ -212,7 +212,100 @@ insert_into_table() {
     done
 }
 
+## select from table
+select_from_table() {
+    if [ -z "$current_database_path" ]; then
+        echo "You are not connected to a database."
+        return
+    fi
 
+    read -p "Enter the name of the table: " table_name
+    table_file="$current_database_path/$table_name.csv"
+    metadata_file="$current_database_path/$table_name.metadata"
+
+    if [ ! -f "$table_file" ]; then
+        echo "Table '$table_name' does not exist."
+        return
+    fi
+
+    if [ ! -f "$metadata_file" ]; then
+        echo "Metadata file for '$table_name' does not exist."
+        return
+    fi
+
+    echo "Select Options:"
+    echo "1. Select all rows from the table"
+    echo "2. Select specific columns from the table"
+    read -p "Choose an option: " option
+
+    case $option in
+        1) 
+            echo "Displaying all rows from the table '$table_name':"
+            if [ ! -s "$table_file" ]; then
+                echo "The table is empty."
+            else
+                cat "$table_file"
+            fi
+            ;;
+        2)
+            echo "Fetching metadata..."
+            # Parse metadata to get column names
+            IFS=',' read -r -a fields < "$metadata_file"
+            column_names=()
+            for field in "${fields[@]}"; do
+                column_names+=("$(echo "$field" | cut -d':' -f1)")
+            done
+            echo "Available columns: ${column_names[*]}"
+
+            read -p "Enter the column names to select (comma-separated): " selected_columns_input
+            IFS=',' read -r -a selected_columns <<< "$selected_columns_input"
+
+            # Validate user input
+            valid_selection=true
+            for column in "${selected_columns[@]}"; do
+                if [[ ! " ${column_names[@]} " =~ " $column " ]]; then
+                    echo "Column '$column' does not exist in the table."
+                    valid_selection=false
+                fi
+            done
+
+            if ! $valid_selection; then
+                echo "Invalid column selection. Please try again."
+                return
+            fi
+
+            echo "Selected columns: ${selected_columns[*]}"
+
+            # Get column indices
+            indices=()
+            for column in "${selected_columns[@]}"; do
+                for i in "${!column_names[@]}"; do
+                    if [[ "${column_names[$i]}" == "$column" ]]; then
+                        indices+=("$i")
+                    fi
+                done
+            done
+
+            echo "Displaying selected columns from the table '$table_name':"
+            {
+                # Display selected column headers
+                echo "${selected_columns[*]}"
+                
+                # Read table data row by row
+                while IFS=',' read -r -a row; do
+                    selected_data=()
+                    for index in "${indices[@]}"; do
+                        selected_data+=("${row[$index]}")
+                    done
+                    echo "${selected_data[*]}" | sed 's/ /,/g' # Output as comma-separated values
+                done
+            } < "$table_file"
+            ;;
+        *)
+            echo "Invalid option."
+            ;;
+    esac
+}
 
 ## Drop Table 
 drop_table() {
