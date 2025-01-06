@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 database_name=""
@@ -20,7 +21,7 @@ create_database() {
         if [ -d "./db/$database_name" ]; then
             echo "Database already exists."
         else
-            mkdir -p "./db/$database_name"  
+            mkdir -p "./db/$database_name"
             echo "Database '$database_name' created."
         fi
     else
@@ -28,6 +29,7 @@ create_database() {
     fi
     return_to_menu
 }
+
 
 ## Listing databases
 list_databases() {
@@ -120,7 +122,8 @@ create_table() {
     fi
 }
 
- 
+
+
 ## List table
 list_tables() {
     if [ -z "$current_database_path" ]; then
@@ -140,14 +143,14 @@ list_tables() {
     return_to_menu
 }
 
-## Drop Table 
+## Drop Table
 drop_table() {
     if [ -z "$current_database_path" ]; then
         echo "You are not connected to a database."
         return
     fi
 
-    tables=$(ls "$current_database_path" | grep -v '.rows' | sed 's/.csv$//') 
+    tables=$(ls "$current_database_path" | grep -v '.rows' | sed 's/.csv$//')
     echo "Tables in the '$current_database_path' database:"
     echo "$tables"
 
@@ -155,7 +158,7 @@ drop_table() {
 
     table_file="$current_database_path/$table_name.csv"
     metadata_file="$current_database_path/$table_name.metadata"
-    
+
     echo "Checking table file: $table_file"
     echo "Checking metadata file: $metadata_file"
 
@@ -180,6 +183,279 @@ drop_table() {
     echo "Table '$table_name' and its metadata have been dropped successfully."
 }
 
+# Delete from table 
+delete_from_table() {
+    echo "Enter your table name:"
+    read -r tname
+
+    if [[ ! -f "$current_database_path/$tname.csv" ]]; then
+        echo "Table does not exist."
+        return
+    fi
+
+    echo "Select an option:"
+    echo "1) Delete a specific column"
+    echo "2) Delete from line to line"
+    echo "3) Delete specific row by primary key"
+    echo "4) Delete specific cell"
+    echo "5) Delete entire table"
+    echo "0) Exit"
+    read -r option
+
+    case $option in
+        1) delete_column ;;
+        2) delete_line_range ;;
+        3) delete_row_by_primary_key ;;
+        4) delete_specific_cell ;;
+        5) delete_entire_table ;;
+        0) return ;;  # Exit function or return to main menu
+        *) echo "Invalid option. Please try again." ;;
+    esac
+}
+
+# Delete a specific column by column number
+delete_column() {
+    local column_number
+    echo "Enter the column number to delete:"
+    read -r column_number
+
+    if [[ ! $column_number =~ ^[0-9]+$ ]]; then
+        echo "Invalid column number."
+        return
+    fi
+
+    # Remove the column from the CSV file
+    awk -F, -v col="$column_number" '{
+        for (i = 1; i <= NF; i++) {
+            if (i != col) printf "%s%s", $i, (i == NF ? ORS : FS)
+        }
+    }' "$current_database_path/$tname.csv" > "$current_database_path/temp.csv" && mv "$current_database_path/temp.csv" "$current_database_path/$tname.csv"
+    echo "Column $column_number deleted."
+}
+
+# Delete a range of lines (rows)
+delete_line_range() {
+    local num_start num_end
+    echo "Enter the start and end row numbers to delete:"
+    read -r num_start num_end
+
+    if [[ ! $num_start =~ ^[0-9]+$ || ! $num_end =~ ^[0-9]+$ || $num_start -gt $num_end ]]; then
+        echo "Invalid row numbers."
+        return
+    fi
+
+    sed -i "${num_start},${num_end}d" "$current_database_path/$tname.csv"
+    echo "Rows $num_start to $num_end deleted."
+}
+
+# Delete a specific row by primary key
+delete_row_by_primary_key() {
+    local primary_key
+    echo "Enter the primary key value of the row to delete:"
+    read -r primary_key
+
+    if [[ -z $primary_key ]]; then
+        echo "Primary key cannot be empty."
+        return
+    fi
+
+    sed -i "/^$primary_key,/d" "$current_database_path/$tname.csv"
+    echo "Row with primary key '$primary_key' deleted."
+}
+
+# Delete a specific cell
+delete_specific_cell() {
+    local row_number column_number
+    echo "Enter the row and column numbers of the cell to delete:"
+    read -r row_number column_number
+
+    if [[ ! $row_number =~ ^[0-9]+$ || ! $column_number =~ ^[0-9]+$ ]]; then
+        echo "Invalid row or column number."
+        return
+    fi
+
+    awk -F, -v row="$row_number" -v col="$column_number" 'NR == row { $col = ""; } { print }' OFS=, "$current_database_path/$tname.csv" > "$current_database_path/temp.csv" && mv "$current_database_path/temp.csv" "$current_database_path/$tname.csv"
+    echo "Cell in row $row_number, column $column_number deleted."
+}
+
+# Delete the entire table
+delete_entire_table() {
+    local confirm
+    echo "Are you sure you want to delete the entire table '$tname'? (y/n)"
+    read -r confirm
+    if [[ $confirm =~ ^[Yy]$ ]]; then
+        rm -f "$current_database_path/$tname.csv" "$current_database_path/$tname.metadata"
+        echo "Table '$tname' and its metadata deleted."
+    else
+        echo "Deletion canceled."
+    fi
+}
+
+## insert_into tables
+insert_into_table() {
+    if [ -z "$current_database_path" ]; then
+        echo "You are not connected to a database."
+        return
+    fi
+
+    read -p "Enter the name of the table: " table_name
+    table_file="$current_database_path/$table_name.csv"
+    metadata_file="$current_database_path/$table_name.metadata"
+
+    if [ ! -f "$table_file" ]; then
+        echo "Table '$table_name' does not exist."
+        return
+    fi
+
+    if [ ! -f "$metadata_file" ]; then
+        echo "Metadata file for '$table_name' does not exist."
+        return
+    fi
+
+    # Read metadata into an array
+    IFS=',' read -r -a fields < "$metadata_file"
+
+    while true; do
+        echo "Enter values for each field:"
+        row=""  # Reset row for new insert
+        for field in "${fields[@]}"; do
+            field_name=$(echo "$field" | cut -d':' -f1)
+            field_type=$(echo "$field" | cut -d':' -f2)
+
+            while true; do
+                read -p "Enter value for $field_name ($field_type): " value
+
+                # Validate value based on type
+                case "$field_type" in
+                    "int")
+                        if [[ ! $value =~ ^[0-9]+$ ]]; then
+                            echo "Invalid value for $field_name. Expected an integer."
+                            continue
+                        fi
+                        ;;
+                    "string")
+                        # No specific validation for strings
+                        if [[ -z "$value" ]]; then
+                            echo "Invalid value for $field_name. Cannot be empty."
+                            continue
+                        fi
+                        ;;
+                    *)
+                        echo "Unknown field type '$field_type' in metadata."
+                        return
+                        ;;
+                esac
+                # Append validated value to row
+                row+="$value,"
+                break
+            done
+        done
+
+        # Remove trailing comma from the row
+        row=${row%,}
+
+        # Append the row to the CSV file
+        echo "$row" >> "$table_file"
+
+        echo "Row inserted successfully!"
+        break
+    done
+}
+
+## select from table
+select_from_table() {
+    if [ -z "$current_database_path" ]; then
+        echo "You are not connected to a database."
+        return
+    fi
+
+    read -p "Enter the name of the table: " table_name
+    table_file="$current_database_path/$table_name.csv"
+    metadata_file="$current_database_path/$table_name.metadata"
+
+    if [ ! -f "$table_file" ]; then
+        echo "Table '$table_name' does not exist."
+        return
+    fi
+
+    if [ ! -f "$metadata_file" ]; then
+        echo "Metadata file for '$table_name' does not exist."
+        return
+    fi
+
+    echo "Select Options:"
+    echo "1. Select all rows from the table"
+    echo "2. Select specific columns from the table"
+    read -p "Choose an option: " option
+
+    case $option in
+        1)
+            echo "Displaying all rows from the table '$table_name':"
+            if [ ! -s "$table_file" ]; then
+                echo "The table is empty."
+            else
+                cat "$table_file"
+            fi
+            ;;
+        2)
+            echo "Fetching metadata..."
+            # Parse metadata to get column names
+            IFS=',' read -r -a fields < "$metadata_file"
+            column_names=()
+            for field in "${fields[@]}"; do
+                column_names+=("$(echo "$field" | cut -d':' -f1)")
+            done
+            echo "Available columns: ${column_names[*]}"
+
+            read -p "Enter the column names to select (comma-separated): " selected_columns_input
+            IFS=',' read -r -a selected_columns <<< "$selected_columns_input"
+
+            # Validate user input
+            valid_selection=true
+            for column in "${selected_columns[@]}"; do
+                if [[ ! " ${column_names[@]} " =~ " $column " ]]; then
+                    echo "Column '$column' does not exist in the table."
+                    valid_selection=false
+                fi
+            done
+
+            if ! $valid_selection; then
+                echo "Invalid column selection. Please try again."
+                return
+            fi
+
+            echo "Selected columns: ${selected_columns[*]}"
+
+            # Get column indices
+            indices=()
+            for column in "${selected_columns[@]}"; do
+                for i in "${!column_names[@]}"; do
+                    if [[ "${column_names[$i]}" == "$column" ]]; then
+                        indices+=("$i")
+                    fi
+                done
+            done
+
+            echo "Displaying selected columns from the table '$table_name':"
+            {
+                # Display selected column headers
+                echo "${selected_columns[*]}"
+
+                # Read table data row by row
+                while IFS=',' read -r -a row; do
+                    selected_data=()
+                    for index in "${indices[@]}"; do
+                        selected_data+=("${row[$index]}")
+                    done
+                    echo "${selected_data[*]}" | sed 's/ /,/g' # Output as comma-separated values
+                done
+            } < "$table_file"
+            ;;
+        *)
+            echo "Invalid option."
+            ;;
+    esac
+}
 
 ## Table operations menu
 table_menu() {
@@ -243,15 +519,15 @@ first_menu() {
         ⠀⠀⠀⠀⠀
         ⠀⠀⠀"
         echo "=== EMA Management System ==="
-        echo "1. Create Database" 
+        echo "1. Create Database"
         echo "2. List Databases"
         echo "3. Connect to Database"
         echo "4. Drop Database"
         echo "5. Exit"
         echo "==============================="
-        
+
         read -p "Choose one from the options " choose
-        
+
         case $choose in
             1) create_database ;;
             2) list_databases ;;
